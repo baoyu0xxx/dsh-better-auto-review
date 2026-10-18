@@ -46,7 +46,11 @@ The reviewer defaults to the conversation's own main model, so there is nothing 
 dsh plugin --profile <profile> add /absolute/path/to/dsh-better-auto-review
 ```
 
-Or install a bundle through the plugin manager (`install_bundle`) with the absolute package directory. Installing **changes nothing by itself**: the gate is armed only when a session selects the `better-auto-review` permission preset.
+Or install a bundle through the plugin manager (`install_bundle`) with the absolute package directory.
+
+A profile owned by the desktop application is refused by the CLI — `dsh` answers *"profile `desktop` is managed exclusively by the Electron application"*. Install into that profile through the app's own plugin manager instead; the command above is for CLI-booted profiles such as `web` or `tui`.
+
+Installing **changes nothing by itself**: the gate is armed only when a session selects the `better-auto-review` permission preset.
 
 ## Enabling it
 

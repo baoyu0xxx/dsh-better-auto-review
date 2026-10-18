@@ -46,7 +46,11 @@
 dsh plugin --profile <profile> add /绝对路径/dsh-better-auto-review
 ```
 
-或通过 plugin manager 的 `install_bundle` 用绝对包目录安装。**安装本身不改变任何行为**：只有在会话里选中 `better-auto-review` 权限预设后闸门才会启用。
+或通过 plugin manager 的 `install_bundle` 用绝对包目录安装。
+
+由桌面应用独占管理的 profile 会被 CLI 拒绝——`dsh` 会回答 *"profile `desktop` is managed exclusively by the Electron application"*。这类 profile 请改用应用自带的插件管理器安装；上面的命令适用于 `web`、`tui` 等 CLI 启动的 profile。
+
+**安装本身不改变任何行为**：只有在会话里选中 `better-auto-review` 权限预设后闸门才会启用。
 
 ## 启用
 
