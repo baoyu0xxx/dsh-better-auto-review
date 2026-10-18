@@ -51,5 +51,5 @@
         approval: ask
         # The preset table's schema also carries user-visible copy, so the
         # picker shows these instead of the bare key.
-        name: Better Auto Review
+        name: B-Auto Review
         description: Fast rules judge every call; only what the rules cannot settle reaches the reviewer model. Choosing this preset is what arms the gate.
