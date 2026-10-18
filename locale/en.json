@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Better Auto Review",
+    "description": "Deterministic-first two-layer tool-call review. Fixed rules approve or refuse in microseconds; only what a rule cannot settle reaches an LLM reviewer, whose model defaults to the conversation's main model."
+  }
+}

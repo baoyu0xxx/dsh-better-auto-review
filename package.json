@@ -1,0 +1,64 @@
+{
+  "name": "dsh-better-auto-review",
+  "version": "0.1.0",
+  "description": "Deterministic-first, LLM-on-demand tool-call review for DeepSeek Harness: a two-layer authorization gate whose reviewer model defaults to the conversation's main model.",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "icon": "./icon.svg",
+  "main": "./lib/index.js",
+  "types": "./lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "lib",
+    "locale",
+    "cordis.patch.yml",
+    "icon.svg",
+    "README.md",
+    "README.zh.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "deepseek-harness",
+    "dsh-plugin",
+    "dsh",
+    "cordis",
+    "auto-review",
+    "approval",
+    "permission-preset",
+    "pre-execute",
+    "guard"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": []
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/baoyu0xxx/dsh-better-auto-review.git"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "check": "node --check lib/config.js && node --check lib/engine.js && node --check lib/audit.js && node --check lib/reviewer.js && node --check lib/gate.js && node --check lib/index.js && node --check lib/client.js",
+    "test": "node --test --test-isolation=none \"tests/*.test.js\"",
+    "selftest": "node selftest.mjs",
+    "verify": "npm run check && npm test && npm run selftest"
+  }
+}

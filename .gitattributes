@@ -1,0 +1,15 @@
+# Normalize line endings so the published source is LF regardless of the
+# contributor's platform. This plugin is plain ESM plus one YAML patch file,
+# all of which are line-ending agnostic at runtime, so LF everywhere is safe.
+* text=auto eol=lf
+
+# Windows-only scripts, if any are ever added, keep CRLF.
+*.ps1 text eol=crlf
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# Binary assets must never be normalized.
+*.png binary
+*.jpg binary
+*.ico binary
+*.pdf binary

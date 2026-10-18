@@ -1,0 +1,9 @@
+# operational scratch (redundancy-audit tooling, one-off reports) — not shipped
+_ops/
+
+node_modules/
+*.log
+secrets.json
+audit.jsonl
+.DS_Store
+Thumbs.db

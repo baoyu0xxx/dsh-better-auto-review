@@ -1,0 +1,55 @@
+# dsh-better-auto-review — bundle patch (the `dsh.bundle.patch` layer).
+#
+# Two entries, in this order:
+#
+#   1. `insert` mounts this plugin's Host row. [`dsh.client`] in package.json
+#      serves the browser half, which registers the settings page.
+#
+#   2. The id-targeted `permission` override ADDS a `better-auto-review`
+#      preset next to the shipped ones. The three shipped presets are restated
+#      verbatim from `@deepseek-ai/dsh-base/cordis.patch.yml` (verified against
+#      the installed bundle) so that this entry is correct whether an
+#      id-targeted override replaces the row's `config` or deep-merges into it.
+#      Restating them costs three lines and removes the entire question:
+#      dropping them would erase read-only / workspace-write / danger-full-access
+#      from every permission picker in this profile if the override replaces.
+#
+# Why a new named preset instead of the shipped `auto` slot:
+#   `ctx.permissionPresets.registerAuto()` is a SINGLE global slot — a second
+#   registration throws `permission: preset "auto" is already registered`, and
+#   the bundled `@deepseek-ai/dsh-experimental-auto-review` already owns it in
+#   this deployment. `@deepseek-ai/dsh-permission-presets` also refuses `auto`
+#   and `custom` as configured preset names, so a named preset is the only way
+#   to ship a second reviewer. It also lets both coexist and lets the user
+#   choose per session instead of one silently replacing the other.
+#
+# The preset bundles `danger-full-access` with `approval: ask`, which is what
+# makes review meaningful: approving here really does grant full access, and a
+# denial really does reach the human as a prompt (`never` would turn every
+# `ask` into a silent deny, which is the trap the shipped Auto review's own
+# notes describe).
+- insert:
+    - id: better-auto-review
+      name: dsh-better-auto-review
+      config: {}
+
+- id: permission
+  name: '@deepseek-ai/dsh-permission-presets'
+  config:
+    presets:
+      read-only:
+        sandbox: read-only
+        approval: ask
+      workspace-write:
+        sandbox: workspace-write
+        approval: ask
+      danger-full-access:
+        sandbox: danger-full-access
+        approval: never
+      better-auto-review:
+        sandbox: danger-full-access
+        approval: ask
+        # The preset table's schema also carries user-visible copy, so the
+        # picker shows these instead of the bare key.
+        name: Better Auto Review
+        description: Fast rules judge every call; only what the rules cannot settle reaches the reviewer model. Choosing this preset is what arms the gate.
