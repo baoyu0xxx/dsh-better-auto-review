@@ -12,6 +12,18 @@ import {
 } from '../lib/reviewer.js'
 import { createAudit, redact, summarize } from '../lib/audit.js'
 
+test('non-mutating inspection does not require a detailed plan, regardless of tool', () => {
+  assert.match(REVIEW_POLICY, /Non-mutating inspection actions.*are low/)
+  assert.match(REVIEW_POLICY, /browsing, search, opening links, screenshots, reading page content, queries, previews, and status checks/)
+  assert.match(REVIEW_POLICY, /do not require a detailed plan or separate approval/)
+  assert.match(REVIEW_POLICY, /an opaque tool description or unspecified incidental effects are not themselves evidence of risk/)
+  assert.match(REVIEW_POLICY, /submitting forms, sending messages, purchasing, editing or deleting external data, changing account settings/)
+  assert.match(REVIEW_POLICY, /When the action and arguments indicate reading, querying, inspection, preview, or navigation, treat unspecified side effects as absent and allow/)
+  assert.match(REVIEW_POLICY, /For non-mutating inspection actions, broad tool capabilities, missing detailed plans, or unstated incidental effects are not ambiguity/)
+  assert.match(REVIEW_POLICY, /Fail closed only when the pending action or its target indicates a plausible listed medium or high effect/)
+  assert.doesNotMatch(REVIEW_POLICY, /browser-plugin tools|in a browser remain medium/)
+})
+
 // ---------------------------------------------------------------------------
 // The decision protocol
 // ---------------------------------------------------------------------------
