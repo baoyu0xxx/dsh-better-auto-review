@@ -34,6 +34,8 @@ export interface AuditEntry {
   attempt?: number
   ruleMs?: number
   modelMs?: number
+  /** Only present when `audit.recordArguments` is on; redacted and bounded. */
+  arguments?: string
 }
 
 /** How the gate is armed. */
@@ -59,7 +61,6 @@ export interface ReviewConfig {
   timeoutMs: number
   /** `ask` hands a reviewer failure to the human; `deny` refuses outright. */
   onError: 'ask' | 'deny'
-  maxInputChars: number
   maxHistoryChars: number
   maxProjectInstructionChars: number
   maxActionChars: number
@@ -101,14 +102,31 @@ export interface Config {
 export interface StateResponse {
   ok: true
   version: string
-  namespace: string
   preset: string
   settingsAvailable: boolean
   auditPath: string | null
   config: Config
-  defaults: Config
-  hardDenyRules: { id: string; why: string }[]
-  stats: Record<string, number>
+  hardDenyRuleCount: number
+}
+
+/** One projected model catalog entry. */
+export interface CatalogModel {
+  id: string
+  name?: string
+  reasoning?: { efforts: { id: string; name?: string; description?: string }[]; defaultEffort?: string }
+}
+
+/** One provider group in the projected model catalog. */
+export interface CatalogGroup {
+  id: string
+  name?: string
+  models: CatalogModel[]
+}
+
+/** The `GET /better-auto-review/models` response body. */
+export interface ModelsResponse {
+  ok: true
+  catalog: { available: boolean; default: { provider: string; model: string; reasoningEffort?: string } | null; groups: CatalogGroup[] }
 }
 
 /** The `POST /better-auto-review/check` response body. */

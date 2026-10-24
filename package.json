@@ -59,9 +59,8 @@
     "access": "public"
   },
   "scripts": {
-    "check": "node --check lib/config.js && node --check lib/engine.js && node --check lib/audit.js && node --check lib/reviewer.js && node --check lib/gate.js && node --check lib/block-assembler.js && node --check lib/index.js && node --check lib/client.js",
+    "check": "node --check lib/index.js && node --check lib/client.js",
     "test": "node --test --test-isolation=none \"tests/*.test.js\"",
-    "selftest": "node selftest.mjs",
-    "verify": "npm run check && npm test && npm run selftest"
+    "verify": "npm run check && npm test"
   }
 }

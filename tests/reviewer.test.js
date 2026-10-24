@@ -4,6 +4,9 @@
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { existsSync, mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
 import {
   REVIEW_POLICY, TruncatedReviewError, budgetForAttempt, buildRequest, classifyEvent,
@@ -11,6 +14,7 @@ import {
   renderUserText, resolveReasoningEffort, resolveRoute,
 } from '../lib/reviewer.js'
 import { createAudit, redact, summarize } from '../lib/audit.js'
+import { BlockAssembler } from '../lib/block-assembler.js'
 
 test('non-mutating inspection does not require a detailed plan, regardless of tool', () => {
   assert.match(REVIEW_POLICY, /Non-mutating inspection actions.*are low/)
@@ -22,6 +26,16 @@ test('non-mutating inspection does not require a detailed plan, regardless of to
   assert.match(REVIEW_POLICY, /For non-mutating inspection actions, broad tool capabilities, missing detailed plans, or unstated incidental effects are not ambiguity/)
   assert.match(REVIEW_POLICY, /Fail closed only when the pending action or its target indicates a plausible listed medium or high effect/)
   assert.doesNotMatch(REVIEW_POLICY, /browser-plugin tools|in a browser remain medium/)
+})
+
+test('reasonable task-supporting actions are judged by impact, not literal enumeration', () => {
+  assert.match(REVIEW_POLICY, /A human task implicitly authorizes ordinary, proportionate steps reasonably needed to complete it, even when not individually listed/)
+  assert.match(REVIEW_POLICY, /A past tool call may prove the exact object this session created or that a child process\/job was started by this session for the current task/)
+  assert.match(REVIEW_POLICY, /Stopping a known child process or job started by this same session for the current task is low/)
+  assert.match(REVIEW_POLICY, /when no unsaved work, partial-write, data-loss, system-service, or other-user impact is indicated/)
+  assert.match(REVIEW_POLICY, /Stopping unrelated, shared, production, or system processes.*remain medium/)
+  assert.match(REVIEW_POLICY, /Assess the reason, necessity, target ownership, reversibility, and likely file or data harm/)
+  assert.match(REVIEW_POLICY, /lack of a verbatim instruction is not by itself grounds to deny/)
 })
 
 // ---------------------------------------------------------------------------
@@ -87,26 +101,8 @@ test('an empty or non-JSON answer is an error', () => {
 // Streaming
 // ---------------------------------------------------------------------------
 
-/** A block assembler with the same contract as `BlockAssembler`. */
-function fakeAssembler() {
-  const blocks = []
-  return {
-    push(chunk) {
-      if (chunk === null || typeof chunk !== 'object') return
-      if (chunk.type === 'reasoning-delta') {
-        const last = blocks[blocks.length - 1]
-        if (last !== undefined && last.type === 'reasoning') last.text += chunk.text ?? ''
-        else blocks.push({ type: 'reasoning', text: chunk.text ?? '' })
-      }
-      if (chunk.type === 'text-delta') {
-        const last = blocks[blocks.length - 1]
-        if (last !== undefined && last.type === 'text') last.text += chunk.text ?? ''
-        else blocks.push({ type: 'text', text: chunk.text ?? '' })
-      }
-    },
-    blocks: () => blocks,
-  }
-}
+/** The real assembler production uses; reasoning blocks included. */
+const assemblerFactory = () => new BlockAssembler()
 
 /** A scripted chunk stream. */
 async function* script(chunks) {
@@ -118,38 +114,38 @@ const stop = { type: 'finish', reason: { kind: 'stop' } }
 test('a reasoning block followed by one text block is read', async () => {
   const decision = await readDecision(
     script([{ type: 'reasoning-delta', text: 'thinking…' }, { type: 'text-delta', text: '{"risk":"low",' }, { type: 'text-delta', text: '"decision":"allow"}' }, stop]),
-    fakeAssembler,
+    assemblerFactory,
   )
   assert.deepEqual(decision, { risk: 'low', decision: 'allow' })
 })
 
 test('a truncation is an error, never a decision', async () => {
   await assert.rejects(
-    () => readDecision(script([{ type: 'text-delta', text: '{"risk":"hi' }, { type: 'finish', reason: { kind: 'max-tokens' } }]), fakeAssembler),
+    () => readDecision(script([{ type: 'text-delta', text: '{"risk":"hi' }, { type: 'finish', reason: { kind: 'max-tokens' } }]), assemblerFactory),
     (error) => error instanceof TruncatedReviewError,
   )
 })
 
 test('provider errors, aborts and a missing finish are errors', async () => {
   await assert.rejects(
-    () => readDecision(script([{ type: 'finish', reason: { kind: 'error', failure: { code: 'X', message: 'boom' } } }]), fakeAssembler),
+    () => readDecision(script([{ type: 'finish', reason: { kind: 'error', failure: { code: 'X', message: 'boom' } } }]), assemblerFactory),
     /ended with error X: boom/,
   )
   await assert.rejects(
-    () => readDecision(script([{ type: 'finish', reason: { kind: 'aborted' } }]), fakeAssembler),
+    () => readDecision(script([{ type: 'finish', reason: { kind: 'aborted' } }]), assemblerFactory),
     /ended with aborted/,
   )
-  await assert.rejects(() => readDecision(script([{ type: 'text-delta', text: 'x' }]), fakeAssembler), /no terminal finish/)
+  await assert.rejects(() => readDecision(script([{ type: 'text-delta', text: 'x' }]), assemblerFactory), /no terminal finish/)
   await assert.rejects(
-    () => readDecision(script([stop, { type: 'text-delta', text: 'late' }]), fakeAssembler),
+    () => readDecision(script([stop, { type: 'text-delta', text: 'late' }]), assemblerFactory),
     /after its terminal finish/,
   )
 })
 
 test('a response with no text block, or with two, is an error', async () => {
-  await assert.rejects(() => readDecision(script([{ type: 'reasoning-delta', text: 'only thinking' }, stop]), fakeAssembler), /exactly one text block/)
+  await assert.rejects(() => readDecision(script([{ type: 'reasoning-delta', text: 'only thinking' }, stop]), assemblerFactory), /exactly one text block/)
   await assert.rejects(
-    () => readDecision(script([{ type: 'text-delta', text: 'a' }, { type: 'reasoning-delta', text: 'b' }, { type: 'text-delta', text: 'c' }, stop]), fakeAssembler),
+    () => readDecision(script([{ type: 'text-delta', text: 'a' }, { type: 'reasoning-delta', text: 'b' }, { type: 'text-delta', text: 'c' }, stop]), assemblerFactory),
     /exactly one text block/,
   )
 })
@@ -301,11 +297,20 @@ test('renderUserText emits the four sections in order', () => {
   const order = ['ENVIRONMENT', 'PROJECT_INSTRUCTIONS', 'FILTERED_HISTORY', 'PENDING_ACTION'].map((section) => text.indexOf(section))
   assert.ok(order.every((at) => at >= 0))
   assert.deepEqual([...order].sort((a, b) => a - b), order)
+  // Compact JSON: indentation used to consume a visible share of the budget.
+  assert.ok(text.includes('{"cwd":"D:\\\\p"}'))
 })
 
 // ---------------------------------------------------------------------------
 // Audit
 // ---------------------------------------------------------------------------
+
+/** A throwaway directory that the test removes afterwards. */
+function tempDir(t) {
+  const directory = mkdtempSync(join(tmpdir(), 'bar-audit-'))
+  t.after(() => rmSync(directory, { recursive: true, force: true }))
+  return directory
+}
 
 test('credentials never reach the audit log', () => {
   assert.deepEqual(redact({ apiKey: 'sk-abcdefghijklmnopqrstuv', command: 'echo hi' }), { apiKey: '[redacted]', command: 'echo hi' })
@@ -319,10 +324,45 @@ test('summaries are bounded', () => {
   assert.equal(summarize({ a: 1 }, 100), '{"a":1}')
 })
 
-test('the audit sink writes, reads back and can be disabled', () => {
-  const directory = process.env.TEMP ?? '.'
-  const audit = createAudit({ directory, config: { enabled: false } })
-  assert.equal(audit.disabled, true)
-  audit.record({ verdict: 'allow' })
-  assert.equal(audit.path.endsWith('audit.jsonl'), true)
+test('the audit sink writes, reads back and can be disabled', (t) => {
+  const directory = tempDir(t)
+  const disabled = createAudit({ directory: join(directory, 'off'), config: { enabled: false } })
+  disabled.record({ verdict: 'allow' })
+  assert.deepEqual(disabled.read(10), [])
+
+  const audit = createAudit({ directory: join(directory, 'on'), config: { enabled: true } })
+  audit.record({ tool: 'pwsh', verdict: 'allow', layer: 1 })
+  audit.record({ tool: 'write', verdict: 'deny', layer: 1 })
+  const entries = audit.read(1)
+  assert.equal(entries.length, 1)
+  assert.equal(entries[0].tool, 'write')
+  assert.equal(typeof entries[0].at, 'string')
+})
+
+test('argument bodies are recorded only when enabled, redacted and bounded', (t) => {
+  const directory = tempDir(t)
+  const off = createAudit({ directory: join(directory, 'off'), config: { enabled: true } })
+  off.record({ tool: 'pwsh', arguments: { command: 'echo hi', apiKey: 'sk-abcdefghijklmnopqrstuv' } })
+  assert.equal(off.read(1)[0].arguments, undefined)
+
+  const on = createAudit({ directory: join(directory, 'on'), config: { enabled: true, recordArguments: true, maxArgChars: 200 } })
+  on.record({ tool: 'pwsh', arguments: { command: 'echo hi', apiKey: 'sk-abcdefghijklmnopqrstuv' } })
+  const entry = on.read(1)[0]
+  assert.match(entry.arguments, /\[redacted\]/)
+
+  const short = createAudit({ directory: join(directory, 'short'), config: { enabled: true, recordArguments: true, maxArgChars: 10 } })
+  short.record({ tool: 'pwsh', arguments: { command: 'echo hi' } })
+  assert.ok(short.read(1)[0].arguments.endsWith('…'))
+})
+
+test('the audit tail is read without parsing the whole file, and rotates', (t) => {
+  const directory = tempDir(t)
+  const audit = createAudit({ directory, config: { enabled: true, maxBytes: 200 } })
+  for (let index = 0; index < 20; index += 1) {
+    audit.record({ tool: 'pwsh', verdict: 'allow', reason: 'x'.repeat(50) })
+  }
+  assert.equal(existsSync(join(directory, 'audit.jsonl.1')), true)
+  const entries = audit.read(3)
+  assert.ok(entries.length > 0 && entries.length <= 3)
+  assert.equal(entries.at(-1).tool, 'pwsh')
 })

@@ -5,28 +5,12 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { createPreExecuteHandler, DENIED_ERROR_CODE, DENIED_ERROR_NAME } from '../lib/gate.js'
+import { createReviewGate, DENIED_ERROR_CODE, DENIED_ERROR_NAME } from '../lib/gate.js'
+import { BlockAssembler } from '../lib/block-assembler.js'
 import { resolveConfig } from '../lib/config.js'
 
 const ENVIRONMENT = { home: 'C:\\Users\\28055', dshHome: 'C:\\Users\\28055\\.dsh', platform: 'win32' }
 const CWD = 'D:\\pyproject\\paper-forecast'
-
-/** A block assembler with the `BlockAssembler` contract. */
-function fakeAssembler() {
-  const blocks = []
-  return {
-    push(chunk) {
-      if (chunk === null || typeof chunk !== 'object') return
-      if (chunk.type === 'reasoning-delta') blocks.push({ type: 'reasoning', text: chunk.text ?? '' })
-      if (chunk.type === 'text-delta') {
-        const last = blocks[blocks.length - 1]
-        if (last !== undefined && last.type === 'text') last.text += chunk.text ?? ''
-        else blocks.push({ type: 'text', text: chunk.text ?? '' })
-      }
-    },
-    blocks: () => blocks,
-  }
-}
 
 /** A scripted reviewer response. */
 function reply(text) {
@@ -59,35 +43,47 @@ function harness(options = {}) {
   const replies = [...(options.replies ?? [])]
   let policy = options.policy ?? 'ask'
   let active = options.active ?? true
+  let contextCalls = 0
+  let factsCalls = 0
 
   const agent = options.agent ?? { session: { id: 'session-abc', header: { cwd: CWD, origin: 'human' } } }
 
-  const handler = createPreExecuteHandler({
+  const gate = createReviewGate({
     getConfig: () => config,
     isActive: () => active,
     approvalPolicy: () => policy,
     runCodeName: 'run_code',
-    createAssembler: fakeAssembler,
+    createAssembler: () => new BlockAssembler(),
     streamReview: (request) => {
       requests.push(request)
       const next = replies.shift()
       if (next === undefined) throw new Error('no scripted reviewer reply left')
       return next(request)
     },
-    buildContext: () => ({
-      cwd: CWD,
-      workspaceRoot: CWD,
-      sessionId: 'session-abc',
-      headerConfig: options.headerConfig ?? { provider: 'opencode-go', model: 'deepseek-v4.1-flash' },
-      advertisedEfforts: options.advertisedEfforts,
-      projectInstructions: [],
-      historyEvents: [],
-    }),
+    sessionFacts: () => {
+      factsCalls += 1
+      return {
+        cwd: CWD,
+        workspaceRoot: CWD,
+        sessionId: 'session-abc',
+        headerConfig: options.headerConfig ?? { provider: 'opencode-go', model: 'deepseek-v4.1-flash' },
+      }
+    },
+    reviewContext: () => {
+      contextCalls += 1
+      return { events: options.events ?? [], advertisedEfforts: options.advertisedEfforts }
+    },
     audit: { record: (entry) => audit.push(entry) },
   })
 
   return {
-    handler, requests, audit, agent,
+    handler: gate.handler,
+    guard: gate.guard,
+    requests,
+    audit,
+    agent,
+    contextCalls: () => contextCalls,
+    factsCalls: () => factsCalls,
     setPolicy: (value) => { policy = value },
     setActive: (value) => { active = value },
   }
@@ -297,4 +293,57 @@ test('the reviewer effort defaults to the lowest advertised level', async () => 
   const h = harness({ replies: [reply('{"risk":"low","decision":"allow"}')], advertisedEfforts: ['max', 'medium', 'low'] })
   await invoke(h.handler, 'pwsh', { command: 'npm run build' })
   assert.equal(h.requests[0].reasoningEffort, 'low')
+})
+
+// ---------------------------------------------------------------------------
+// Lazy context and the hard floor
+// ---------------------------------------------------------------------------
+
+test('rule decisions never read the session event log', async () => {
+  const h = harness()
+  await invoke(h.handler, 'pwsh', { command: 'git status --short' })
+  assert.equal(h.contextCalls(), 0)
+  await invoke(h.handler, 'pwsh', { command: 'Remove-Item -Recurse -Force C:\\Users\\28055\\.dsh' })
+  assert.equal(h.contextCalls(), 0)
+})
+
+test('an oversized action and a routeless session also skip the event log', async () => {
+  const large = harness({ settings: { review: { maxActionChars: 50 } } })
+  await invoke(large.handler, 'pwsh', { command: 'npm run build --flag ' + 'x'.repeat(500) })
+  assert.equal(large.contextCalls(), 0)
+
+  const routeless = harness({ headerConfig: { provider: '', model: '' } })
+  await invoke(routeless.handler, 'pwsh', { command: 'npm run build' })
+  assert.equal(routeless.contextCalls(), 0)
+})
+
+test('a reviewed call reads the event log exactly once', async () => {
+  const h = harness({ replies: [reply('{"risk":"low","decision":"allow"}')] })
+  await invoke(h.handler, 'pwsh', { command: 'npm run build' })
+  assert.equal(h.contextCalls(), 1)
+})
+
+test('the hard floor skips what the listener decided and still denies the rest', async () => {
+  const h = harness({ replies: [reply('{"risk":"low","decision":"allow"}')] })
+  const execution = {
+    name: 'pwsh',
+    arguments: { command: 'npm run build' },
+    agent: h.agent,
+    parent: undefined,
+    signal: new AbortController().signal,
+  }
+  await h.handler(execution, async () => ({ kind: 'allow' }))
+  const factsAfterHandler = h.factsCalls()
+  assert.equal(h.guard(execution), undefined)
+  assert.equal(h.factsCalls(), factsAfterHandler, 'the guard must not re-evaluate a decided execution')
+
+  const unseen = { ...execution, arguments: { command: 'format C:' } }
+  assert.match(h.guard(unseen), /formats a volume/)
+  assert.equal(h.factsCalls(), factsAfterHandler + 1)
+})
+
+test('the hard floor stands aside when the plugin is disabled', () => {
+  const h = harness({ settings: { enabled: false } })
+  const execution = { name: 'pwsh', arguments: { command: 'format C:' }, agent: h.agent, parent: undefined }
+  assert.equal(h.guard(execution), undefined)
 })

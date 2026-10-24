@@ -61,17 +61,17 @@ To arm it for every session instead, open **Settings → Plugins → Better Auto
 
 ## Configuration
 
-Everything is on the plugin's own page under **Settings → Plugins → Better Auto Review**. The page reads and writes the Host half's own routes, so validation and persistence stay in one place.
+Everything is on the plugin's own page under **Settings → Plugins → Better Auto Review**. The plugin-manager detail page also offers a compact **Reviewer model** section; both pages share one data hook and the same controls, use Host routes for validation and persistence, and follow DSH's own settings design tokens (so they track the app's theme and type scale) while the full settings tab retains rules, audit, and the rest of the configuration.
 
 | Group | What it controls |
 |---|---|
 | **Gate** | enabled, `preset` vs `always`, and the preset key |
-| **Reviewer** | provider, model, reasoning effort, output budget and its ceiling, timeout, failure policy, history/action budgets |
+| **Reviewer** | provider/model, reasoning effort, output budget and ceiling, timeout, failure policy, history/action budgets |
 | **Layer 1 rules** | the hard-deny floor, the two fast-allow switches, protected paths, sensitive write paths, extra allowed roots, and the fast-allow command patterns |
 | **Try a command** | a dry run of layer 1: which rule would fire, with nothing executed |
 | **Audit log** | recording switches, and the last 15 decisions |
 
-**Reviewer model.** Leave `provider` and `model` empty to inherit the conversation's main model. Fill in **both** to override — a half-filled pair is ignored rather than guessed.
+**Reviewer model.** Choose from the models advertised by configured DSH providers, or keep **Inherit from conversation** (the default) to use the session's own route; advertised reasoning-effort choices follow the selected model. A saved route that the current catalog no longer advertises stays visible instead of being silently dropped.
 
 **Fast-allow command patterns.** This is the one knob worth understanding. Layer 1 refuses to *guess*: anything it cannot prove is ordinary work escalates, which costs one model request. That is the right default for a gate that really does grant access, but a project whose everyday command is a compiler or a test runner will pay for it on every call. Listing regexes such as `^npm run ` or `^pytest\b` makes those free. The list is consulted **last**, after every deny and every sensitive-path escalation has declined, so a bad entry cannot open the floor.
 
@@ -151,15 +151,14 @@ Get-Content "$env:USERPROFILE\.dsh\plugin-state\better-auto-review\audit.jsonl" 
 
 ## Testing
 
-The rules, the reviewer's parsing, the audit log and the whole decision path are pure modules over `node:*` only, so the suite runs in a fresh clone with no `node_modules`, no network and no DSH:
+The rules, the reviewer's parsing, the audit log and the whole decision path are pure modules over `node:*` only. Run `npm install` once for the single dependency (`@deepseek-ai/schemastery`, used by the Host adapter and the schema test); after that the suite is offline and needs no DSH:
 
 ```bash
-npm test        # 68 unit tests
-npm run selftest  # the 41-case acceptance table, printed
-npm run verify    # syntax + tests + selftest
+npm test        # 87 unit tests
+npm run verify  # syntax + tests
 ```
 
-The Host adapter (`lib/index.js`) is additionally verified against a stubbed DSH host that drives `apply()` end to end — settings registration, the listener, the `tools.guard` floor, all five HTTP routes, the `/bar` command and teardown.
+The gate, reviewer, audit, catalog and config modules are covered end to end by that suite, including the lazy-context and hard-floor paths. The HTTP route layer in `lib/index.js` is a thin adapter over them and was exercised against a stubbed host during development; it has no separate permanent harness.
 
 ## Limitations
 
