@@ -42,6 +42,14 @@
 
 ## 安装
 
+从 GitHub 安装（tagged release）：
+
+```bash
+dsh plugin --profile <profile> add https://github.com/baoyu0xxx/dsh-better-auto-review
+```
+
+从本地检出安装（开发调试）：
+
 ```bash
 dsh plugin --profile <profile> add /绝对路径/dsh-better-auto-review
 ```

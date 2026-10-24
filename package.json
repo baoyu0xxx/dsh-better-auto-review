@@ -8,7 +8,8 @@
     "@deepseek-ai/schemastery": "3.18.5"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=20",
+    "dsh": ">=0.2.1-rc.2 <0.3.0"
   },
   "icon": "./icon.svg",
   "main": "./lib/index.js",
@@ -54,6 +55,10 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/baoyu0xxx/dsh-better-auto-review.git"
+  },
+  "homepage": "https://github.com/baoyu0xxx/dsh-better-auto-review#readme",
+  "bugs": {
+    "url": "https://github.com/baoyu0xxx/dsh-better-auto-review/issues"
   },
   "publishConfig": {
     "access": "public"

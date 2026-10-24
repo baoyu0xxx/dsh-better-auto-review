@@ -42,6 +42,14 @@ The reviewer defaults to the conversation's own main model, so there is nothing 
 
 ## Install
 
+From GitHub (tagged release):
+
+```bash
+dsh plugin --profile <profile> add https://github.com/baoyu0xxx/dsh-better-auto-review
+```
+
+From a local checkout (development):
+
 ```bash
 dsh plugin --profile <profile> add /absolute/path/to/dsh-better-auto-review
 ```
